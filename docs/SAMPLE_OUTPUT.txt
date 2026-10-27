@@ -1,0 +1,140 @@
+NOTE: captured output of the earlier (pre-XGBoost) version of NEXUS, kept for reference. Paths were normalised to ~/NEXUS.
+       Current verified results are in docs/FINAL_TEST_REPORT.md.
+
+NEXUS - sample output captured from a real run on Ubuntu 26.04 under WSL 2 (12 logical CPUs, 7.8 GB RAM, PostgreSQL 18, g++ 15.2, CMake 4.2).
+Master, 3 Workers and PostgreSQL all ran on that ONE machine, so the Workers share its CPU cores and RAM.
+Nothing below is typed in by hand: it is the captured output of ./scripts/run_demo.sh (one "Starting Master..." line
+removed) and the summary lines of ./scripts/run_tests.sh. Timestamps, ids, host name and paths are those of that run.
+
+################################################################  ./scripts/run_demo.sh --stop
+Cluster is up: Master + 3 Workers (capacity 3 concurrent tasks each).
+Dashboard: http://127.0.0.1:8080/
+
+================================================================
+  1. Cluster: Workers, resources, capacity
+================================================================
+  W1  healthy  cpu   3.3%  ram   8.2%  slots 3  heartbeat 0.3s ago  host LETSSS-GOOOOO (12 cores)
+  W2  healthy  cpu   3.2%  ram   8.2%  slots 3  heartbeat 0.3s ago  host LETSSS-GOOOOO (12 cores)
+  W3  healthy  cpu   2.6%  ram   8.2%  slots 3  heartbeat 0.3s ago  host LETSSS-GOOOOO (12 cores)
+  Several Workers run on the same physical host: they share its CPU cores and RAM, so they are separate processes, not separate machines.
+
+================================================================
+  2. Multi-core: 3 tasks x 1.0 s of CPU on ONE Worker (capacity 3) run at the same time
+================================================================
+  wall-clock for 3 x 1.0 s tasks: 1.33 s (serial execution would need >= 3.0 s)
+  TASK-156 on W1  started 14:43:06.793  finished 14:43:07.793  (1 tasks running when it started)
+  TASK-157 on W1  started 14:43:06.874  finished 14:43:07.874  (2 tasks running when it started)
+  TASK-158 on W1  started 14:43:06.959  finished 14:43:07.960  (3 tasks running when it started)
+  measured: cluster max concurrent = 9; per Worker: {'W1': 3, 'W2': 3, 'W3': 3}
+
+================================================================
+  3. Scheduling policies: same 6 tasks (priorities 1..6), different decisions
+================================================================
+  FCFS -> workers chosen per task: W1(p1) W1(p2) W1(p3) W2(p4) W2(p5) W2(p6) 
+  ROUND_ROBIN -> workers chosen per task: W1(p1) W2(p2) W3(p3) W1(p4) W2(p5) W3(p6) 
+  PRIORITY -> workers chosen per task: W1(p1) W2(p2) W3(p3) W1(p4) W2(p5) W3(p6) 
+  RESOURCE_AWARE -> workers chosen per task: W2(p1) W3(p2) W1(p3) W2(p4) W3(p5) W1(p6) 
+
+================================================================
+  4. Distributed storage: upload, replicate, verify, reconstruct
+================================================================
+  generated /tmp/nexus_demo_corpus.txt (596969 bytes)
+  dataset 4: 6 blocks of <= 100000 bytes, replication 2, health OK
+    ds4_b0    99995 bytes  sha256 06cdc7f5c2..  replicas on: W2, W3
+    ds4_b1   100000 bytes  sha256 b6b5680d27..  replicas on: W1, W2
+    ds4_b2   100000 bytes  sha256 2ec056cb0a..  replicas on: W1, W3
+    ds4_b3    99999 bytes  sha256 546ddd4c49..  replicas on: W2, W3
+    ds4_b4    99996 bytes  sha256 56fdfdfb98..  replicas on: W1, W2
+    ds4_b5    96979 bytes  sha256 00adbdbbf6..  replicas on: W1, W3
+  block files on the Workers' disks:
+    ~/NEXUS/worker_data/W1/blocks/ds4_b1.blk
+    ~/NEXUS/worker_data/W1/blocks/ds4_b2.blk
+    ~/NEXUS/worker_data/W1/blocks/ds4_b4.blk
+    ~/NEXUS/worker_data/W1/blocks/ds4_b5.blk
+    ~/NEXUS/worker_data/W2/blocks/ds4_b0.blk
+    ~/NEXUS/worker_data/W2/blocks/ds4_b1.blk
+    ~/NEXUS/worker_data/W2/blocks/ds4_b3.blk
+    ~/NEXUS/worker_data/W2/blocks/ds4_b4.blk
+    ~/NEXUS/worker_data/W3/blocks/ds4_b0.blk
+    ~/NEXUS/worker_data/W3/blocks/ds4_b2.blk
+    ~/NEXUS/worker_data/W3/blocks/ds4_b3.blk
+    ~/NEXUS/worker_data/W3/blocks/ds4_b5.blk
+  verify: 12 replicas checked, 12 healthy, 0 corrupt, reconstructable=True
+saved /tmp/nexus_demo_corpus.out (596969 bytes, checksum-verified by the Master)
+  reconstructed file is IDENTICAL to the original
+
+================================================================
+  5. MapReduce word count over the distributed blocks
+================================================================
+  job 145 COMPLETED: unique_words=17, total_words=80000, top=block(4828) nexus(4793) map(4785) worker(4729) postgres(4726)
+    stage SPLIT    COMPLETED 0.000 s  (6 task(s))
+    stage MAP      COMPLETED 0.084 s  (6 task(s))
+    stage REDUCE   COMPLETED 0.035 s  (3 task(s))
+    stage SHUFFLE  COMPLETED 0.022 s  (3 task(s))
+    stage FINALIZE COMPLETED 0.000 s  (1 task(s))
+    TASK-183 MAP     on W3  ds4_b0
+    TASK-184 MAP     on W2  ds4_b1
+    TASK-185 MAP     on W1  ds4_b2
+    TASK-186 MAP     on W3  ds4_b3
+    TASK-187 MAP     on W2  ds4_b4
+    TASK-188 MAP     on W1  ds4_b5
+    TASK-189 REDUCE  on W3  partition 0
+    TASK-190 REDUCE  on W2  partition 1
+    TASK-191 REDUCE  on W3  partition 2
+  independent check with tr|sort|uniq:
+       4828 block
+       4793 nexus
+       4785 map
+  NEXUS result top-3: block=4828, nexus=4793, map=4785
+
+================================================================
+  6. AI task-time prediction: build real history, train, schedule with the model
+================================================================
+  running 60 real tasks of varying size to create execution history...
+  training: TRAINED  samples=251 (train 201 / test 50)  MAE=0.0073s  RMSE=0.0131s  baseline MAE=0.2984s
+  model beats the mean-duration baseline on the held-out split
+  TASK-252 scale-> predicted 0.11 s, actual 0.1 s on W3  [AI_ASSISTED]
+  TASK-253 scale-> predicted 0.504 s, actual 0.5 s on W3  [AI_ASSISTED]
+  TASK-254 scale-> predicted 0.862 s, actual 0.9 s on W2  [AI_ASSISTED]
+
+================================================================
+  7. Persistence: everything above is in PostgreSQL
+================================================================
+  tasks 254, jobs 208, datasets 4, blocks 20, replicas 40
+
+Demo finished. Open the dashboard: http://127.0.0.1:8080/
+stopped worker_W1
+stopped worker_W2
+stopped worker_W3
+stopped master
+
+################################################################  ./scripts/run_tests.sh   (summary lines)
+test_message: 57 checks, 0 failed
+test_scheduler: 67 checks, 0 failed
+test_worker_exec: 86 checks, 0 failed
+test_storage: 19876 checks, 0 failed
+test_ml: 49 checks, 0 failed
+test_http: 24 checks, 0 failed
+test_db: 137 checks, 0 failed
+  startup        7 checks, 0 failed
+  api            9 checks, 0 failed
+  protocol       7 checks, 0 failed
+  execution      9 checks, 0 failed
+  concurrency    9 checks, 0 failed
+  policies      12 checks, 0 failed
+  recovery       9 checks, 0 failed
+  storage       29 checks, 0 failed
+  mapreduce     12 checks, 0 failed
+  ml            15 checks, 0 failed
+  persistence    8 checks, 0 failed
+  dashboard      9 checks, 0 failed
+  TOTAL        135 checks, 0 failed   (logs: /tmp/nexus_it_idsbry49/logs)
+==================== TEST SUMMARY ====================
+  test_message       PASSED
+  test_scheduler     PASSED
+  test_worker_exec   PASSED
+  test_storage       PASSED
+  test_ml            PASSED
+  test_http          PASSED
+  test_db            PASSED
+  integration_test   PASSED

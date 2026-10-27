@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXUS Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">N</span><div><h1>NEXUS</h1><small>distributed processing &amp; storage</small></div></div>
+  <div class="top-right">
+    <span class="pill" id="policyPill" title="Active scheduling policy">policy: …</span>
+    <span class="pill" id="conn"><span class="dot"></span><span id="connText">connecting…</span></span>
+  </div>
+</header>
+<div id="banner" class="banner hidden" role="alert"></div>
+<div id="hostNote" class="note hidden"></div>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="workers">Workers</button>
+  <button data-tab="tasks">Tasks</button>
+  <button data-tab="scheduling">Scheduling</button>
+  <button data-tab="benchmarks">Benchmarks</button>
+  <button data-tab="storage">Storage</button>
+  <button data-tab="mapreduce">MapReduce</button>
+  <button data-tab="resources">Resources</button>
+  <button data-tab="ml">AI model</button>
+  <button data-tab="logs">Logs</button>
+</nav>
+
+<main>
+  <!-- ======================= Overview ======================= -->
+  <section id="tab-overview" class="tab active">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="card"><h2>Workers</h2><div id="ovWorkers" class="empty">loading…</div></div>
+      <div class="card"><h2>Hosts <small>(Workers on one computer share its CPU and RAM)</small></h2><div id="ovHosts" class="empty">loading…</div></div>
+    </div>
+    <div class="card"><h2>Latest tasks</h2><div id="ovTasks" class="empty">loading…</div></div>
+  </section>
+
+  <!-- ======================= Workers ======================= -->
+  <section id="tab-workers" class="tab">
+    <div class="card"><h2>Worker registry <small>live from PostgreSQL; health is computed from heartbeat age, never from a stored flag</small></h2>
+      <div id="workersTable" class="empty">loading…</div></div>
+  </section>
+
+  <!-- ======================= Tasks ======================= -->
+  <section id="tab-tasks" class="tab">
+    <div class="card">
+      <h2>Submit a task</h2>
+      <form id="taskForm" class="form-row">
+        <label>Type
+          <select id="tfType">
+            <option>CPU_BURN</option><option>WORD_COUNT</option><option>PRIME_COUNT</option>
+            <option>MATRIX_MULTIPLY</option><option>CHECKSUM</option>
+            <option>BLOCK_CHECKSUM</option><option>BLOCK_WORD_COUNT</option>
+          </select></label>
+        <label>Scale <input id="tfScale" type="number" min="1" max="100" value="3" title="CPU_BURN: scale x 100 ms; others: amount of work (1-20)"></label>
+        <label>Priority (0-9) <input id="tfPrio" type="number" min="0" max="9" value="5" title="Higher = more urgent. Used by PRIORITY and AI_ASSISTED policies."></label>
+        <label id="tfBlockWrap" class="hidden">Block id <input id="tfBlock" placeholder="ds1_b0" pattern="[A-Za-z0-9_-]+"></label>
+        <label>Count <input id="tfCount" type="number" min="1" max="200" value="1"></label>
+        <button class="primary" type="submit">Submit</button>
+      </form>
+      <div id="tfMsg" class="msg"></div>
+    </div>
+    <div class="card">
+      <h2>Task queue &amp; status
+        <select id="taskFilter" class="inline"><option value="">all</option><option>PENDING</option><option>ASSIGNED</option><option>RUNNING</option><option>COMPLETED</option><option>FAILED</option></select></h2>
+      <div id="tasksTable" class="empty">loading…</div>
+    </div>
+    <div class="card"><h2>Execution history <small>one row per attempt, measured on the Worker</small></h2><div id="historyTable" class="empty">loading…</div></div>
+  </section>
+
+  <!-- ======================= Scheduling ======================= -->
+  <section id="tab-scheduling" class="tab">
+    <div class="card">
+      <h2>Scheduling policy <small>change takes effect immediately, no restart</small></h2>
+      <div id="policyCards" class="policy-cards"></div>
+      <div id="policyMsg" class="msg"></div>
+    </div>
+    <div class="card"><h2>Scheduling decisions <small>click a row to see the metrics of every Worker at decision time</small></h2>
+      <div id="decisionsTable" class="empty">loading…</div></div>
+  </section>
+
+  <!-- ======================= Benchmarks ======================= -->
+  <section id="tab-benchmarks" class="tab">
+    <div class="card">
+      <h2>Compare scheduling algorithms <small>the same seeded workload is run once per policy on the live cluster; every number is measured and stored in PostgreSQL</small></h2>
+      <form id="benchForm" class="form-row">
+        <fieldset class="policies"><legend>Policies</legend>
+          <label class="check"><input type="checkbox" name="pol" value="FCFS" checked> FCFS</label>
+          <label class="check"><input type="checkbox" name="pol" value="ROUND_ROBIN" checked> Round Robin</label>
+          <label class="check"><input type="checkbox" name="pol" value="PRIORITY" checked> Priority</label>
+          <label class="check"><input type="checkbox" name="pol" value="RESOURCE_AWARE" checked> Resource-Aware</label>
+          <label class="check"><input type="checkbox" name="pol" value="AI_ASSISTED" checked> AI-Assisted (XGBoost)</label>
+        </fieldset>
+        <label>Workload
+          <select id="bfType">
+            <option value="MIXED">MIXED (prime/word/matrix/checksum/burn)</option><option>CPU_BURN</option><option>PRIME_COUNT</option>
+            <option>WORD_COUNT</option><option>MATRIX_MULTIPLY</option><option>CHECKSUM</option>
+            <option>BLOCK_CHECKSUM</option><option>BLOCK_WORD_COUNT</option>
+          </select></label>
+        <label id="bfDsWrap" class="hidden">Dataset <select id="bfDataset"></select></label>
+        <label>Tasks per policy <input id="bfCount" type="number" min="1" max="500" value="24"></label>
+        <label>Scale min <input id="bfMin" type="number" min="1" max="100" value="1"></label>
+        <label>Scale max <input id="bfMax" type="number" min="1" max="100" value="3"></label>
+        <label>Priorities <select id="bfPrio"><option value="varied">varied (0-9, seeded)</option><option value="uniform">uniform (all 5)</option></select></label>
+        <label>Seed <input id="bfSeed" type="number" min="0" value="1" title="Same seed = identical workload"></label>
+        <label>Repeats <input id="bfRep" type="number" min="1" max="5" value="1" title="More repeats average out noise; the policy order is rotated"></label>
+        <label class="check"><input id="bfRetrain" type="checkbox"> retrain the model first</label>
+        <button class="primary" type="submit" id="bfRun">Run benchmark</button>
+        <button type="button" id="bfCancel" class="hidden">Cancel</button>
+      </form>
+      <div id="bfMsg" class="msg"></div>
+      <p class="muted">Fairness: identical task list for every policy, cluster must be idle before each run, all tasks are queued together before dispatch starts. Differences between policies on a lightly loaded or single-host cluster can be small and are affected by OS scheduling and caches &mdash; use repeats &gt; 1.</p>
+    </div>
+    <div class="card"><h2>Benchmark runs <small>stored in PostgreSQL, still here after a page refresh or restart</small></h2><div id="benchList" class="empty">loading…</div></div>
+    <div class="card hidden" id="benchDetail"></div>
+  </section>
+
+  <!-- ======================= Storage ======================= -->
+  <section id="tab-storage" class="tab">
+    <div class="card">
+      <h2>Upload a dataset</h2>
+      <form id="uploadForm" class="form-row">
+        <label>File <input id="ufFile" type="file" required></label>
+        <label>Block size (bytes) <input id="ufBlock" type="number" min="16" max="4194304" value="262144"></label>
+        <label>Replication <input id="ufRepl" type="number" min="1" max="8" value="2"></label>
+        <label class="check"><input id="ufText" type="checkbox"> text-aligned (needed for MapReduce)</label>
+        <button class="primary" type="submit">Upload</button>
+      </form>
+      <div id="ufMsg" class="msg"></div>
+    </div>
+    <div class="card"><h2>Datasets</h2><div id="datasetsTable" class="empty">loading…</div></div>
+    <div class="card hidden" id="datasetDetail"></div>
+  </section>
+
+  <!-- ======================= MapReduce ======================= -->
+  <section id="tab-mapreduce" class="tab">
+    <div class="card">
+      <h2>Run word-count MapReduce</h2>
+      <form id="mrForm" class="form-row">
+        <label>Dataset <select id="mrDataset"></select></label>
+        <label>Reducers <input id="mrRed" type="number" min="1" max="16" value="2"></label>
+        <label>Priority <input id="mrPrio" type="number" min="0" max="9" value="5"></label>
+        <button class="primary" type="submit">Start job</button>
+      </form>
+      <div id="mrMsg" class="msg"></div>
+    </div>
+    <div class="card"><h2>MapReduce jobs</h2><div id="jobsTable" class="empty">loading…</div></div>
+    <div class="card hidden" id="jobDetail"></div>
+  </section>
+
+  <!-- ======================= Resources ======================= -->
+  <section id="tab-resources" class="tab">
+    <div class="card"><h2>Resource utilisation
+      <select id="chartMinutes" class="inline"><option value="2">2 min</option><option value="10" selected>10 min</option><option value="60">60 min</option></select></h2>
+      <div class="charts">
+        <figure><figcaption>CPU % <small>(whole host)</small></figcaption><canvas id="chCpu"></canvas></figure>
+        <figure><figcaption>RAM %</figcaption><canvas id="chRam"></canvas></figure>
+        <figure><figcaption>Tasks running per Worker</figcaption><canvas id="chRun"></canvas></figure>
+      </div>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div class="card"><h2>Concurrency <small>measured from real start/finish timestamps</small></h2>
+      <div id="concStats" class="empty">loading…</div>
+      <canvas id="chGantt" class="gantt"></canvas>
+      <div id="concNote" class="muted"></div>
+    </div>
+  </section>
+
+  <!-- ======================= ML ======================= -->
+  <section id="tab-ml" class="tab">
+    <div class="card"><h2>Task-duration model <small>trained on this cluster's real execution history; the algorithm name below is the one actually in use</small></h2>
+      <div id="mlStatus" class="empty">loading…</div>
+      <button class="primary" id="mlTrain" title="Trains XGBoost (the default model) on the stored history">Train / retrain XGBoost</button>
+      <button id="mlTrainRf" title="Trains the from-scratch Random Forest as a separate, separately labelled model">Train Random Forest instead</button> <span id="mlMsg" class="msg"></span>
+    </div>
+    <div class="card"><h2>Training runs</h2><div id="mlRuns" class="empty">loading…</div></div>
+    <div class="card"><h2>Predictions vs. actual durations</h2><div id="mlPreds" class="empty">loading…</div></div>
+  </section>
+
+  <!-- ======================= Logs ======================= -->
+  <section id="tab-logs" class="tab">
+    <div class="card"><h2>Master log <select id="logTag" class="inline"><option value="">all</option></select></h2>
+      <pre id="logBox" class="log"></pre></div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden"><div class="modal-body"><button class="close" id="modalClose" aria-label="Close">×</button><div id="modalContent"></div></div></div>
+<script src="/app.js"></script>
+</body>
+</html>

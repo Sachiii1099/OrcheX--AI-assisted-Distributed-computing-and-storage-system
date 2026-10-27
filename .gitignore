@@ -1,0 +1,21 @@
+
+# build output
+# generated / local
+# packaging
+# runtime state
+# secrets / local config
+*.a
+*.o
+*.pyc
+*.zip
+.env
+.pgdata/
+__pycache__/
+build/
+exports/
+logs/
+models/
+nexus_storage/
+run/
+third_party/
+worker_data/
